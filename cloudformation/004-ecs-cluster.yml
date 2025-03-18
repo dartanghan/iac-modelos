@@ -1,0 +1,290 @@
+
+#  aws cloudformation deploy --stack-name dart-ecs-cluster-004-${CFN_MODE} --template 004-ecs-cluster.cfn.yml
+#
+# aws cloudformation delete-stack --stack-name dart-ecs-cluster-004-${CFN_MODE} --profile=dart${CFN_MODE}
+Description: |
+  Cluster ECS para execução de containers
+  Este script cria:
+  - ECS SG
+  - ECS Cluster
+  - ElasticLoadBalancer
+  - AutoScalingGroups 
+  - Listeners padrão para porta 80 e 443
+
+Parameters:
+  mode:
+    Type: "String"
+    AllowedValues:
+      - "hom"
+      - "prod"
+    Description: "Tipos de deploy"
+
+Resources:
+  DartECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to ECS EC2
+      VpcId: !ImportValue DartVPC
+      Tags:
+        - Key: Name
+          Value: sg-Dart-ecs
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 10001
+          ToPort: 10001
+          CidrIp: 0.0.0.0/0
+
+  DartECSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2008-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: 
+                - ecs.amazonaws.com
+                - ec2.amazonaws.com
+                - ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceRole'
+
+  DartECSRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "Dart-ecs-role-policy-${mode}"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - 's3:ListBucket'
+              - 's3:PutObject'
+              - 's3:GetObject'
+              - 's3:GetObjectVersion'
+              - 's3:PutObjectAcl'      
+              - 's3:GetBucketLocation'     
+            Effect: Allow
+            Resource:
+              - !Sub "arn:aws:s3:::Dart"
+          - Action:
+              - "cloudwatch:PutMetricData"
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+              - "logs:DescribeLogGroups"
+              - "logs:DescribeLogStreams"
+            Effect: Allow
+            Resource:
+              - "*"
+          - Action: #Usados pelo agente EC2 / Tasks
+              - ecs:RegisterContainerInstance
+              - ecs:DeregisterContainerInstance
+              - ecs:DiscoverPollEndpoint
+              - ecs:Submit*
+              - ecs:Poll
+              - ecs:StartTelemetrySession
+            Effect: Allow
+            Resource: '*' # restringir
+          - Action: #Usados pela Task
+              - ecr:GetAuthorizationToken
+              - ecr:BatchGetImage
+              - ecr:GetDownloadUrlForLayer
+              - secretsmanager:ListSecrets
+              - secretsmanager:GetSecretValue
+            Effect: Allow
+            Resource: '*' # restringir
+      Roles: 
+        - !Ref DartECSRole
+
+  DartECSInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [ !Ref DartECSRole ]
+
+  DartECSCluster:
+    Description: |
+      Cluster ECS, usado para rodar os containers
+      - DartECSLaunchConfiguration
+      - DartECSAutoScalingGroup
+    Type: 'AWS::ECS::Cluster'
+    Properties:
+      ClusterName: "Dart-ecs-cluster"
+
+  DartECSLaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: ami-0eaf9d31f215903b0
+      InstanceType: t2.micro
+      IamInstanceProfile: !Ref DartECSInstanceProfile
+      SecurityGroups: 
+        - !Ref DartECSSecurityGroup
+      UserData: 
+        Fn::Base64: 
+          Fn::Sub: |
+            #!/bin/bash -xe
+            echo ECS_CLUSTER=${DartECSCluster} >> /etc/ecs/ecs.config
+
+  DartECSAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier: 
+        - !ImportValue DartSNPrivA
+        - !ImportValue DartSNPrivB
+      LaunchConfigurationName: !Ref DartECSLaunchConfiguration
+      MinSize: '1'
+      MaxSize: '4'
+      DesiredCapacity: '2'
+
+  DartECSLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties: 
+      LogGroupName: !Join ['', ['/aws/ecs/', !Sub "${DartECSCluster}"  ]]
+
+
+  DartECSLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: Dart-ecs-loadbalancer
+      Scheme: internet-facing
+      Subnets:
+        - !ImportValue DartSNPubA
+        - !ImportValue DartSNPubB
+      SecurityGroups:
+        - !Ref DartECSSecurityGroup
+      Type: application
+      Tags:
+        - Key: Name
+          Value: Dart-ecs-loadbalancer
+
+  DartECSLoadBalancer80Listener:
+    Description: | 
+      Aqui criamos um listener no loadbalancer, escutando tudo o que
+      bater na porta 80 e retornando forbidden... até termos algo escutando
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref DartECSLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            StatusCode: "401"
+
+  DartECSLoadBalancer443Listener:
+    Description: | 
+      Aqui criamos um listener no loadbalancer, escutando tudo o que
+      bater na porta 443 e retornando forbidden... até termos algo escutando
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref DartECSLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+      - CertificateArn: !ImportValue DartCert
+      DefaultActions:
+        - Type: fixed-response
+          FixedResponseConfig:
+            StatusCode: "401"
+      SslPolicy: "ELBSecurityPolicy-TLS13-1-2-2021-06"
+
+  DartBatchListenerCertificate:
+    Description: |
+      ##############
+      ### CERTIFICATE LISTENER
+      # Aqui vamos criar um certificado para o listener do serviço Dart.
+      # Este certificado será usado para garantir que o serviço Dart
+      # seja acessado de forma segura.
+      ##############
+    Type: AWS::ElasticLoadBalancingV2::ListenerCertificate
+    Properties:
+      Certificates:
+        - CertificateArn: !ImportValue DartCert
+      ListenerArn: !ImportValue DartECSLoadBalancer443Listener
+
+
+  DartECSEC2DNSAddress:
+    Description: |
+      ### ROUTE53
+      Aqui vamos criar o registro DNS para o nosso host EC2.
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneName: Dart.com.br.
+      Name: !Sub "Dart-ecs.${mode}.Dart.com.br"
+      Type: CNAME
+      TTL: '300'
+      ResourceRecords:
+        - !GetAtt DartECSLoadBalancer.DNSName
+
+  DartECSSecurityGroupDatabaseIngress:
+    Description: |
+      ##############
+      # Adição de acesso ao banco de dados
+      # - Vamos garantir que o ECS consiga acessar o banco de dados Dart
+      ##############
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: "Acesso ao banco de dados pelo ECS"
+      FromPort: 3306
+      ToPort: 3306
+      GroupId: !ImportValue DartDBSecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !ImportValue DartECSSecurityGroup
+
+Outputs:
+  DartECSCluster:
+    Description: ECS Cluster
+    Value: !Ref DartECSCluster
+    Export:
+      Name: DartECSCluster
+  DartECSClusterArn:
+    Description: ECS Cluster ARN
+    Value: !GetAtt  DartECSCluster.Arn
+    Export:
+      Name: DartECSClusterArn
+  DartECSSecurityGroup:
+    Description: ECS Cluster
+    Value: !Ref DartECSSecurityGroup
+    Export:
+      Name: DartECSSecurityGroup
+  DartECSLoadBalancer:
+    Description: LoadBalancer ECS
+    Value: !Ref DartECSLoadBalancer
+    Export:
+      Name: DartECSLoadBalancer    
+  DartECSRole:
+    Description: Role ECS
+    Value: !Ref DartECSRole
+    Export:
+      Name: DartECSRole
+  DartECSLoadBalancer443Listener:
+    Value: !Ref DartECSLoadBalancer443Listener
+    Export:
+      Name: DartECSLoadBalancer443Listener
+
+  DartECSLoadBalancer80Listener:
+    Value: !Ref DartECSLoadBalancer80Listener
+    Export:
+      Name: DartECSLoadBalancer80Listener
+  DartECSLoadBalancerDNSName:
+    Value: !GetAtt DartECSLoadBalancer.DNSName
+    Export:
+      Name: DartECSLoadBalancerDNSName
+
+  Versao:
+    Description: Versão do template
+    Value: 1.0.0
+
+
+
+#   DartECSEC2Instance:
+#     Description: IP EC2 Cluster ECS
+#     Value: !GetAtt DartECSEC2Instance.PublicIp
