@@ -1,4 +1,6 @@
 # aws cloudformation deploy --stack-name my-bucket --template-file 001-bucket.yml
+# aws cloudformation validate-template --template-body file://001-bucket.ymla
+# aws cloudformation delete-stack --stack-name my-bucket
 Resources:
   MyBucket:
     Type: AWS::S3::Bucket

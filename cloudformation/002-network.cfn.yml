@@ -1,9 +1,7 @@
-# export CFN_MODE=hom
-# aws cloudformation deploy --stack-name Dart-network-001-${CFN_MODE} --template 001-Dart-network.cfn.yml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides "mode=${CFN_MODE}" 
+# aws cloudformation deploy --stack-name Dart-network-002 --template 002-network.cfn.yml
 
-# Deletar Stack
-# aws cloudformation delete-stack --stack-name Dart-network-101-${CFN_MODE} --profile=Dart${CFN_MODE}
-
+# aws cloudformation validate-template --template-body file://002-network.cfn.yml
+# aws cloudformation delete-stack --stack-name Dart-network-102
 
 Resources:
   DartVPC:
@@ -68,125 +66,12 @@ Resources:
         - 1
         - !GetAZs
           Ref: 'AWS::Region'
-
-  DartIGW:
-    Type: AWS::EC2::InternetGateway
-    Properties:
-      Tags:
-        - Key: Custos
-          Value: Dart-Network
-        - Key: Name
-          Value: Dart-internet-gateway
-
-  DartGatewayAttachment:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties:
-      VpcId: !Ref DartVPC
-      InternetGatewayId: !Ref DartIGW
-
-  DartPublicRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref DartVPC
-      Tags:
-        - Key: Custos
-          Value: Dart-Network
-        - Key: Name
-          Value: Dart-public-route-table
-
-  DartPrivateRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref DartVPC
-      Tags:
-        - Key: Custos
-          Value: Dart-Network
-        - Key: Name
-          Value: Dart-private-route-table
-
-  DartPublicRoute:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref DartPublicRouteTable
-      DestinationIpv6CidrBlock: "::/0" # Roteamento para ipv6
-      GatewayId: !Ref DartIGW
-
-  DartPrivateRouteIPv4:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref DartPrivateRouteTable
-      DestinationCidrBlock: 0.0.0.0/0 # Roteamento para ipv4
-      NatGatewayId: !Ref DartGW
-
-  DartPublicRouteIPv4:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref DartPublicRouteTable
-      DestinationCidrBlock: 0.0.0.0/0 # Roteamento para ipv4
-      GatewayId: !Ref DartIGW            
-
-  DartGWEIP:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-      Tags:
-        - Key: Custos
-          Value: Dart-Network
-        - Key: Name
-          Value: Dart-eip
-
-  DartGW:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId: !GetAtt DartGWEIP.AllocationId
-      SubnetId: !Ref DartSNPubA
-      Tags:
-        - Key: Custos
-          Value: Dart-Network
-        - Key: Name
-          Value: Dart-nat-gw
-
-  DartSubnet1RouteTableAssociationA:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref DartSNPrivA
-      RouteTableId: !Ref DartPrivateRouteTable
-
-  DartSubnet1RouteTableAssociationB:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref DartSNPrivB
-      RouteTableId: !Ref DartPrivateRouteTable
-
-  DartSubnet2RouteTableAssociationA:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref DartSNPubA
-      RouteTableId: !Ref DartPublicRouteTable
-
-  DartSubnet2RouteTableAssociationB:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref DartSNPubB
-      RouteTableId: !Ref DartPublicRouteTable
-  
-  VpcEndpointS3:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      RouteTableIds: 
-        - Ref: DartPrivateRouteTable
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
-      VpcId: !Ref DartVPC
       
 Outputs:
   DartVPC:
     Value: !Ref DartVPC
     Export:
       Name: "DartVPC"
-  DartGWEIPID:
-    Value: !GetAtt DartGWEIP.AllocationId
-    Export:
-      Name: "DartGWEIPID"
   DartSNPrivA:
     Value: !Ref DartSNPrivA
     Export:
@@ -203,8 +88,4 @@ Outputs:
     Value: !Ref DartSNPubB
     Export:
       Name: "DartSNPubB"
-  DartGW:
-    Value: !Ref DartGW
-    Export:
-      Name: "DartGW"
  

@@ -1,0 +1,127 @@
+# aws cloudformation deploy --stack-name Dart-network-003 --template 003-network-routes.cfn.yml
+
+# aws cloudformation validate-template --template-body file://003-network-routes.cfn.yml
+# aws cloudformation delete-stack --stack-name Dart-network-103
+
+Resources: 
+
+  DartIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Custos
+          Value: Dart-Network
+        - Key: Name
+          Value: Dart-internet-gateway
+
+  DartGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !ImportValue DartVPC
+      InternetGatewayId: !Ref DartIGW
+
+  DartPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !ImportValue DartVPC
+      Tags:
+        - Key: Custos
+          Value: Dart-Network
+        - Key: Name
+          Value: Dart-public-route-table
+
+  DartPrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !ImportValue DartVPC
+      Tags:
+        - Key: Custos
+          Value: Dart-Network
+        - Key: Name
+          Value: Dart-private-route-table
+
+  DartPublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref DartPublicRouteTable
+      DestinationIpv6CidrBlock: "::/0" # Roteamento para ipv6
+      GatewayId: !Ref DartIGW
+
+  DartPrivateRouteIPv4:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref DartPrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0 # Roteamento para ipv4
+      NatGatewayId: !Ref DartGW
+
+  DartPublicRouteIPv4:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref DartPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0 # Roteamento para ipv4
+      GatewayId: !Ref DartIGW            
+
+  DartGWEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Custos
+          Value: Dart-Network
+        - Key: Name
+          Value: Dart-eip
+
+  DartGW:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt DartGWEIP.AllocationId
+      SubnetId: !ImportValue DartSNPubA
+      Tags:
+        - Key: Custos
+          Value: Dart-Network
+        - Key: Name
+          Value: Dart-nat-gw
+
+  DartSubnet1RouteTableAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !ImportValue DartSNPrivA
+      RouteTableId: !Ref DartPrivateRouteTable
+
+  DartSubnet1RouteTableAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !ImportValue DartSNPrivB
+      RouteTableId: !Ref DartPrivateRouteTable
+
+  DartSubnet2RouteTableAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !ImportValue DartSNPubA
+      RouteTableId: !Ref DartPublicRouteTable
+
+  DartSubnet2RouteTableAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !ImportValue DartSNPubB
+      RouteTableId: !Ref DartPublicRouteTable
+  
+  VpcEndpointS3:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      RouteTableIds: 
+        - Ref: DartPrivateRouteTable
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcId: !ImportValue DartVPC
+      
+      
+Outputs:
+  DartGWEIPID:
+    Value: !GetAtt DartGWEIP.AllocationId
+    Export:
+      Name: "DartGWEIPID"
+  DartGW:
+    Value: !Ref DartGW
+    Export:
+      Name: "DartGW"
+       
