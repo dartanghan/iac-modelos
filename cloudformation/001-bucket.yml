@@ -1,0 +1,7 @@
+# aws cloudformation deploy --stack-name my-bucket --template-file 001-bucket.yml
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        Fn::Sub: "my-bucket-${AWS::AccountId}-${AWS::Region}"

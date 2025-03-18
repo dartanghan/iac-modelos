@@ -1,0 +1,210 @@
+# export CFN_MODE=hom
+# aws cloudformation deploy --stack-name Dart-network-001-${CFN_MODE} --template 001-Dart-network.cfn.yml --capabilities CAPABILITY_NAMED_IAM --parameter-overrides "mode=${CFN_MODE}" 
+
+# Deletar Stack
+# aws cloudformation delete-stack --stack-name Dart-network-101-${CFN_MODE} --profile=Dart${CFN_MODE}
+
+
+Resources:
+  DartVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 172.35.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true      
+
+  DartVPCIpv6CidrBlock: # Esse cara aqui garante que a VPC vai permitir usarmos IPV6
+    Type: AWS::EC2::VPCCidrBlock
+    Properties:
+      VpcId: !Ref DartVPC
+      AmazonProvidedIpv6CidrBlock: true 
+
+  DartSNPrivA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AssignIpv6AddressOnCreation: true
+      Ipv6CidrBlock: !Select [ 0, !Cidr [ !Select [ 0, !GetAtt DartVPC.Ipv6CidrBlocks], 8, 64 ]] # vamos gerar 8 subnets ipv6 e vamos pegar a primeira
+      CidrBlock: 172.35.10.0/24
+      VpcId: !Ref DartVPC
+      AvailabilityZone: !Select 
+        - 0 
+        - !GetAZs
+          Ref: 'AWS::Region'
+
+  DartSNPrivB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AssignIpv6AddressOnCreation: true
+      Ipv6CidrBlock: !Select [ 1, !Cidr [ !Select [ 0, !GetAtt DartVPC.Ipv6CidrBlocks], 8, 64 ]] # vamos gerar 8 subnets ipv6 e vamos pegar a segunda
+      CidrBlock: 172.35.11.0/24
+      VpcId: !Ref DartVPC
+      AvailabilityZone: !Select 
+        - 1
+        - !GetAZs
+          Ref: 'AWS::Region'
+
+  DartSNPubA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: false
+      AssignIpv6AddressOnCreation: true
+      Ipv6CidrBlock: !Select [ 2, !Cidr [ !Select [ 0, !GetAtt DartVPC.Ipv6CidrBlocks], 8, 64 ]] # vamos gerar 8 subnets ipv6 e vamos pegar a terceira
+      CidrBlock: 172.35.20.0/24
+      VpcId: !Ref DartVPC
+      AvailabilityZone: !Select 
+        - 0 
+        - !GetAZs
+          Ref: 'AWS::Region'
+
+  DartSNPubB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AssignIpv6AddressOnCreation: true
+      MapPublicIpOnLaunch: false
+      Ipv6CidrBlock: !Select [ 3, !Cidr [ !Select [ 0, !GetAtt DartVPC.Ipv6CidrBlocks], 8, 64 ]] # vamos gerar 8 subnets ipv6 e vamos pegar a quarta
+      CidrBlock: 172.35.21.0/24
+      VpcId: !Ref DartVPC
+      AvailabilityZone: !Select 
+        - 1
+        - !GetAZs
+          Ref: 'AWS::Region'
+
+  DartIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Custos
+          Value: Dart-Network
+        - Key: Name
+          Value: Dart-internet-gateway
+
+  DartGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref DartVPC
+      InternetGatewayId: !Ref DartIGW
+
+  DartPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DartVPC
+      Tags:
+        - Key: Custos
+          Value: Dart-Network
+        - Key: Name
+          Value: Dart-public-route-table
+
+  DartPrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DartVPC
+      Tags:
+        - Key: Custos
+          Value: Dart-Network
+        - Key: Name
+          Value: Dart-private-route-table
+
+  DartPublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref DartPublicRouteTable
+      DestinationIpv6CidrBlock: "::/0" # Roteamento para ipv6
+      GatewayId: !Ref DartIGW
+
+  DartPrivateRouteIPv4:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref DartPrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0 # Roteamento para ipv4
+      NatGatewayId: !Ref DartGW
+
+  DartPublicRouteIPv4:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref DartPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0 # Roteamento para ipv4
+      GatewayId: !Ref DartIGW            
+
+  DartGWEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Custos
+          Value: Dart-Network
+        - Key: Name
+          Value: Dart-eip
+
+  DartGW:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt DartGWEIP.AllocationId
+      SubnetId: !Ref DartSNPubA
+      Tags:
+        - Key: Custos
+          Value: Dart-Network
+        - Key: Name
+          Value: Dart-nat-gw
+
+  DartSubnet1RouteTableAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DartSNPrivA
+      RouteTableId: !Ref DartPrivateRouteTable
+
+  DartSubnet1RouteTableAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DartSNPrivB
+      RouteTableId: !Ref DartPrivateRouteTable
+
+  DartSubnet2RouteTableAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DartSNPubA
+      RouteTableId: !Ref DartPublicRouteTable
+
+  DartSubnet2RouteTableAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DartSNPubB
+      RouteTableId: !Ref DartPublicRouteTable
+  
+  VpcEndpointS3:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      RouteTableIds: 
+        - Ref: DartPrivateRouteTable
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcId: !Ref DartVPC
+      
+Outputs:
+  DartVPC:
+    Value: !Ref DartVPC
+    Export:
+      Name: "DartVPC"
+  DartGWEIPID:
+    Value: !GetAtt DartGWEIP.AllocationId
+    Export:
+      Name: "DartGWEIPID"
+  DartSNPrivA:
+    Value: !Ref DartSNPrivA
+    Export:
+      Name: "DartSNPrivA"
+  DartSNPrivB:
+    Value: !Ref DartSNPrivB
+    Export:
+      Name: "DartSNPrivB"
+  DartSNPubA:
+    Value: !Ref DartSNPubA
+    Export:
+      Name: "DartSNPubA"
+  DartSNPubB:
+    Value: !Ref DartSNPubB
+    Export:
+      Name: "DartSNPubB"
+  DartGW:
+    Value: !Ref DartGW
+    Export:
+      Name: "DartGW"
+ 
