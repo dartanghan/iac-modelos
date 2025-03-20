@@ -1,0 +1,16 @@
+Parameters:
+  name:
+    Type: String
+    Description: Seu nome
+
+Resources:
+  BUCKETS3:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${name}-bucket
+
+Outputs:
+  bucketname:
+    Value: !Ref BUCKETS3
+    Export:
+      Name: bucketname
