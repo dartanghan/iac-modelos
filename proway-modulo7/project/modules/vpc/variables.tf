@@ -1,3 +1,3 @@
-variable "dart_nginx_sg_id" {
+variable "project_name" {
     type = string
 }
