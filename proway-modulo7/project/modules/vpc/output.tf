@@ -1,5 +1,5 @@
 output "vpc_id" {
-    value = aws_vpc.vpc.id
+    value = aws_vpc.dart_vpc.id
 }
 output "sn_priv01" {
     value = aws_subnet.sn_priv01.id
