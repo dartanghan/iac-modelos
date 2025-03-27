@@ -48,7 +48,7 @@ resource "aws_instance" "dart_nginx_ec2" {
   instance_type = "t3.micro"
   ami = data.aws_ami.imagem_ec2.id
   subnet_id = aws_subnet.sn_pub01.id
-  vpc_security_group_ids = [ var.dart_nginx_sg_id ]
+  vpc_security_group_ids = [ aws_security_group.dart_nginx_sg.id ]
   
   associate_public_ip_address = true
   tags = {
