@@ -5,7 +5,7 @@ provider "aws" {
 
 terraform {
     backend "s3" {
-        bucket = "dart-terraform-state"
+        bucket = "dartproway-terraform-state"
         key    = "terraform.tfstate"
         region = "us-west-1"
     }
