@@ -2,10 +2,13 @@ provider "aws" {
     region = var.project_region
 }
 
+local {
+    bucket_name = "${var.project_name}-terraform-state"
+}
 
 terraform {
     backend "s3" {
-        bucket = "dartproway-terraform-state"
+        bucket = local.bucket_name
         key    = "terraform.tfstate"
         region = "us-west-1"
     }
