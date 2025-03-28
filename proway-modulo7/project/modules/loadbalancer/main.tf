@@ -9,7 +9,7 @@ data "aws_ami" "imagem_ec2" {
 
 
 resource "aws_security_group" "dart_nginx_sg" {
-    vpc_id = aws_vpc.dart_vpc.id
+    vpc_id = var.vpc_id
     name = "dart_nginx_sg"
     tags = {
       Name = "dart-nginx_sg"
@@ -38,7 +38,7 @@ resource "aws_vpc_security_group_ingress_rule" "dart_ingress_22_sg_rule" {
 }
 
 resource "aws_network_interface" "dart_nginx_ei" {
-  subnet_id = aws_subnet.sn_pub01.id
+  subnet_id = var.sn_pub01.id
   tags = {
     Name = "dart_nginx_ei"
   }
@@ -47,7 +47,7 @@ resource "aws_network_interface" "dart_nginx_ei" {
 resource "aws_instance" "dart_nginx_ec2" {
   instance_type = "t3.micro"
   ami = data.aws_ami.imagem_ec2.id
-  subnet_id = aws_subnet.sn_pub01.id
+  subnet_id = var.sn_pub01.id
   vpc_security_group_ids = [ aws_security_group.dart_nginx_sg.id ]
   
   associate_public_ip_address = true
