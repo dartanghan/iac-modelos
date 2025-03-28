@@ -2,7 +2,7 @@ provider "aws" {
     region = var.project_region
 }
 
-local {
+locals {
     bucket_name = "${var.project_name}-terraform-state"
 }
 
