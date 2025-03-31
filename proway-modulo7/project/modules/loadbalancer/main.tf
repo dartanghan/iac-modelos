@@ -54,4 +54,8 @@ resource "aws_instance" "dart_nginx_ec2" {
   tags = {
     Name = "dart-nginx_ec2"
   }
+
+  # lifecycle {
+  #   create_before_destroy = true
+  # }
 }
